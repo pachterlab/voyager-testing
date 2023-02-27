@@ -9,16 +9,74 @@ import os
 
 from anndata import AnnData
 from pathlib import Path
+from typing import List, Optional, Sequence, Union
 
 #%%
 import requests
 
+import functools
+from collections import defaultdict
 
-def add_checkpoint(df, filename: Path):
-    pass
+checkpoint_counters = defaultdict(int)
 
 
-def main(cwd: Path, checkpoint_dir: Path, data_dir: Path, sync_with_R: bool = True):
+def checkpoint_fun(fun):
+    @functools.wraps(fun)
+    def inner(
+        *args,
+        filename: Union[str, Path],
+        dir: Optional[Path] = None,
+        increment: bool = True,
+        include_counter: bool = True,
+        **kwargs,
+    ):
+        global checkpoint_counters
+        filename = Path(filename)
+
+        if dir is not None:
+            filename = dir / filename
+
+        filename = filename.resolve()
+        parent_dir = filename.parent
+        parent_dir.mkdir(parents=True, exist_ok=True)
+
+        i_checkpoint = checkpoint_counters[parent_dir]
+
+        if include_counter:
+            filename = filename.with_stem(f"{filename.stem}_{i_checkpoint}")
+        print("Saving checkpoint", filename)
+        ret = fun(*args, filename=filename, **kwargs)
+
+        if include_counter and increment:
+            checkpoint_counters[parent_dir] += 1
+        return ret
+
+    return inner
+
+
+@checkpoint_fun
+def mtx_checkpoint(df, *, filename: Path, **kwargs):
+    """write df to mtx file. All elements must be numbers"""
+    io.mmwrite(filename, df)
+
+
+@checkpoint_fun
+def txt_checkpoint(
+    items: List[Union[str, Sequence[str]]], filename: Path, sep: str = ",", **kwargs
+):
+    """write items into text file. If an element in items is an iterable of str,
+    they are concatenated with sep.
+
+    items: List[Union[str, Sequence[str]]] - the items to write
+    filename: Path - the path to the output file
+    sep: str - the separator to use if an item in items is a sequence
+    """
+    with filename.open("wt") as f:
+        rows = map(sep.join, items)
+        f.writelines([row + "\n" for row in rows])
+
+
+def main(cwd: Path, checkpoint_dir: Path, data_dir: Path, sync_with_other: bool = True):
     download_data(cwd, data_dir)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -50,6 +108,18 @@ def main(cwd: Path, checkpoint_dir: Path, data_dir: Path, sync_with_R: bool = Tr
     adata = vp.spatial.get_geom(adata)
 
     # TODO: add checkpoint before this plot
+    checkpoint_features = [
+        "sum",
+        "detected",
+        "subsets_mito_sum",
+        "subsets_mito_detected",
+        "subsets_mito_percent",
+    ]
+    mtx_checkpoint(
+        adata.obs[checkpoint_features],
+        filename=checkpoint_dir / "chkpt.mtx",
+    )
+
     # PLOT: plot_spatial_feature(adata, ['sum', 'detected', 'subsets_mito_percent'])
 
     adata.obs["in_tissue"] = adata.obs["in_tissue"].astype("category")
@@ -57,25 +127,36 @@ def main(cwd: Path, checkpoint_dir: Path, data_dir: Path, sync_with_R: bool = Tr
     # PLOT: plot_barcode_data as scatter (subsets_mito_percent and sum). Don't need a checkpoint
 
     adata_tissue = adata[adata.obs["in_tissue"] == 1]
+    del adata
+
+    txt_checkpoint(
+        adata_tissue.obs.index.tolist(), filename=checkpoint_dir / "tissue_spots.txt"
+    )
 
     # Do we need this?
     adata_tissue = vp.spatial.get_geom(adata_tissue)
 
     adata_tissue.layers["counts"] = adata_tissue.X.copy()
-    # TODO: Add checkpoint to verify subset: counts layer vs counts assay
     vp.utils.log_norm_counts(adata_tissue, inplace=True)
     adata_tissue.layers["logcounts"] = adata_tissue.X.copy()
 
+    # TODO: Add checkpoint to verify subset: counts layer vs counts assay
+    mtx_checkpoint(
+        adata_tissue.layers["counts"], filename=checkpoint_dir / "counts.mtx"
+    )
     # TODO: Add checkpoint to verify log_norm_counts: logcounts layer vs logcounts assay
+    mtx_checkpoint(
+        adata_tissue.layers["logcounts"], filename=checkpoint_dir / "logcounts.mtx"
+    )
 
     hvgs_file = sync_dir / "hvgs.txt"
-    if sync_with_R and hvgs_file.exists():
+    if sync_with_other and hvgs_file.exists():
         with hvgs_file.open() as f:
             hvgs = list(map(str.strip, f.readlines()))
             adata_tissue.var["highly_variable"] = False
 
             # Depends on the df index the user chose
-            if adata_tissue.uns["config"]["varnames"] == "gene_ids":
+            if adata_tissue.uns["config"]["var_names"] == "gene_ids":
                 adata_tissue.var.loc[hvgs, "highly_variable"] = True
             else:
                 adata_tissue.var["highly_variable"] = adata_tissue.var["gene_ids"].isin(
@@ -86,6 +167,9 @@ def main(cwd: Path, checkpoint_dir: Path, data_dir: Path, sync_with_R: bool = Tr
         # We can use flavor as: seurat, seurat_v3 (uses counts), cell_ranger
         # seurat and cell_ranger use log_counts
         sc.pp.highly_variable_genes(adata_tissue, flavor="seurat", n_top_genes=2000)
+        if sync_with_other:
+            hvgs = adata_tissue.var[adata_tissue.var["highly_variable"]].index.tolist()
+            txt_checkpoint(hvgs, filename=sync_dir / "hvgs.txt", include_counter=False)
         # TODO: Add checkpoint?
 
     # Dimension reduction and clustering
@@ -97,6 +181,7 @@ def main(cwd: Path, checkpoint_dir: Path, data_dir: Path, sync_with_R: bool = Tr
     sc.tl.pca(adata_tissue, use_highly_variable=True, n_comps=30, random_state=1337)
 
     # TODO: add checkpoint comparing X_pca with reduced_dim(sfe, "PCA")
+    mtx_checkpoint(adata_tissue.obsm["X_pca"], filename=checkpoint_dir / "pca.mtx")
 
     sc.pp.neighbors(adata_tissue, n_pcs=3, use_rep="X_pca")
     sc.tl.leiden(
@@ -107,9 +192,16 @@ def main(cwd: Path, checkpoint_dir: Path, data_dir: Path, sync_with_R: bool = Tr
     )
 
     cluster_file = sync_dir / "cluster.txt"
-    if sync_with_R and cluster_file.exists():
-        # TODO: read cluster file, preferably with index and cluster
-        pass
+
+    if sync_with_other:
+        if cluster_file.exists():
+            pass
+        else:
+            txt_checkpoint(
+                adata_tissue.obs["cluster"].items(),
+                filename=cluster_file,
+                include_counter=False,
+            )
 
     # TODO: Do we need to compute the umap?
     # sc.tl.umap(adata_tissue)
@@ -166,7 +258,7 @@ if __name__ == "__main__":
 
     cwd = Path(__file__).parent
     checkpoint_dir = cwd / f"checkpoints_{args.checkpoint}"
-    data_dir = cwd / f"checkpoints_{args.datadir}"
+    data_dir = cwd / args.datadir
     print(cwd)
     print(checkpoint_dir)
 
