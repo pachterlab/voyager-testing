@@ -1,0 +1,6 @@
+checkpoints/
+outs/
+*.tar.gz
+.Rhistory
+__pycache__*
+.DS_Store*
