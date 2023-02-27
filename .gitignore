@@ -1,5 +1,10 @@
 checkpoints/
 outs/
+
+vignettes/*/data
+vignettes/*/checkpoints_*/
+vignettes/*/sync_data/
+
 *.tar.gz
 .Rhistory
 __pycache__*
