@@ -1,9 +1,9 @@
 checkpoints/
-outs/
+**/outs/
 
 vignettes/*/data
-vignettes/*/checkpoints_*/
-vignettes/*/sync_data/
+**/checkpoints_*/
+**/sync_*/
 
 *.tar.gz
 .Rhistory
