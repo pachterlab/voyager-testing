@@ -77,9 +77,7 @@ gene_var = vp.utils.model_gene_var(
 )
 
 # CHECKPOINT (sync): gene_var.csv
-gene_var = checkpoint.sync(
-    "gene_var.csv", gene_var.rename(columns={"p_value": "p.value"}), index_col=0
-)
+gene_var = checkpoint.sync("gene_var.csv", gene_var, index_col=0)
 
 
 # In[ ]:
@@ -137,22 +135,22 @@ markers = vp.utils.find_markers(adata)
 for key in markers.keys():
     name, num = key.split("_")
     marker_file: str = f"markers_{int(num)+1}.csv"
-    r_columns = ["p.value", "FDR", "summary.AUC"]
-    py_columns = ["p_vals", "FDR", "summary_es"]
+    columns = ["p.value", "FDR", "summary.AUC"]
+    # columns = ["p_vals", "FDR", "summary_es"]
     df = checkpoint.sync(
         marker_file,
-        markers[key].rename(columns=dict(zip(py_columns, r_columns))),
+        markers[key],  # .rename(columns=dict(zip(py_columns, r_columns))),
         index_col=0,
-    )[r_columns]
-    df = df.rename(columns=dict(zip(r_columns, py_columns)))
-    markers[key] = df.sort_values(by="p_vals")
+    )[columns]
+    # df = df.rename(columns=dict(zip(r_columns, py_columns)))
+    markers[key] = df.sort_values(by="p.value")
 
 
 # In[ ]:
 
 
 marker_genes = [
-    marker.sort_values(by="p_vals").iloc[0].name
+    marker.sort_values(by="p.value").iloc[0].name
     for _, marker in sorted(markers.items())
 ]
 
@@ -181,7 +179,9 @@ dist.data = 1 / dist.data
 
 # row normalize the matrix
 dist /= dist.sum(axis=1)
-adata.obsp["knn_weights"] = dist
+from scipy.sparse import csr_matrix
+
+adata.obsp["knn_weights"] = csr_matrix(dist)
 
 del dist
 
@@ -231,7 +231,9 @@ checkpoint.add("moran_plot.csv", df)
 
 # CHECKPOINT: localmoran.csv
 _ = vp.spatial.local_moran(adata, qc_features, graph_name=knn_graph)
-checkpoint.add("localmoran.csv", adata.obsm["local_moran"][qc_features])
+n = adata.n_obs
+correction = n / (n - 1)
+checkpoint.add("localmoran.csv", adata.obsm["local_moran"][qc_features] * correction)
 
 
 # In[ ]:
@@ -330,8 +332,10 @@ corgram = vp.spatial.compute_correlogram(adata, marker_genes, order=6)
 
 
 _ = vp.spatial.local_moran(adata, marker_genes, layer="logcounts")
-# CHECKPOINT: localmoran.csv
-checkpoint.add("localmoran.csv", adata.obsm["local_moran"][marker_genes])
+# CHECKPOINT:
+n = adata.n_obs
+correction = n / (n - 1)
+checkpoint.add("localmoran.csv", adata.obsm["local_moran"][marker_genes] * correction)
 
 
 # ### LOSH

@@ -53,7 +53,7 @@ visium_spots = vp.spatial.to_points(
 )
 
 # or, equivalently
-spots_x, spots_y = vp.spatial.get_spot_coords(adata, tissue=False)
+spots_x, spots_y = vp.spatial.get_spot_coords(adata)
 spots = gpd.GeoSeries.from_xy(spots_x, spots_y, index=adata.obs_names).buffer(
     scale * spot_diam / 2
 )
@@ -90,11 +90,7 @@ gene_var = vp.utils.model_gene_var(
 )
 
 # CHECKPOINT: gene_var.csv
-gene_var = checkpoint.sync(
-    "gene_var.csv",
-    gene_var.rename(columns={"p_value": "p.value"}),
-    index_col=0,
-)
+gene_var = checkpoint.sync("gene_var.csv", gene_var, index_col=0)
 
 # Compute the highly variable genes
 hvgs = vp.utils.get_top_hvgs(gene_var)

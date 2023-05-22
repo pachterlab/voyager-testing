@@ -32,38 +32,37 @@ df <- colData(sfe)[, c(
 	"subsets_mito_detected", 
 	"subsets_mito_percent"
 )] %>% as.data.frame
-checkpoint.csv(df, "qc_metrics.csv")
+checkpoint.csv("qc_metrics.csv", df)
 
 sfe <- SpatialFeatureExperiment::transpose(sfe)
 
 sfe_tissue <- sfe[,sfe$in_tissue]
 # CHECKPOINT: tissue_ids.txt
-checkpoint.txt(colnames(sfe_tissue), "tissue_ids.txt")
+checkpoint.txt("tissue_ids.txt", colnames(sfe_tissue))
 
 # CHECKPOINT: counts.mtx
-checkpoint.mtx(counts(sfe_tissue), "counts.mtx")
+. <- checkpoint.mtx("counts.mtx", counts(sfe_tissue))
 
 sfe_tissue <- logNormCounts(sfe_tissue)
 # CHECKPOINT: logcounts.mtx
-checkpoint.mtx(logcounts(sfe_tissue), "logcounts.mtx")
+. <- checkpoint.mtx("logcounts.mtx", logcounts(sfe_tissue))
 
 dec <- modelGeneVar(sfe_tissue, lowess = FALSE)
 # CHECKPOINT (sync): gene_var.csv
-checkpoint.csv(dec, "gene_var.csv", sync=TRUE)
+checkpoint.csv("gene_var.csv", dec, sync=TRUE)
 
 hvgs <- getTopHVGs(dec, n = 2000)
 
 # CHECKPOINT: hvgs.txt
-checkpoint.txt(hvgs, "hvgs.txt", sync = FALSE) # we want to compare hvgs given gene_var
+checkpoint.txt("hvgs.txt", hvgs, sync = FALSE) # we want to compare hvgs given gene_var
 set.seed(29)
 sfe_tissue <- runPCA(sfe_tissue, ncomponents = 30, subset_row = hvgs,
                      scale = TRUE, BSPARAM=BiocSingular::ExactParam()) # scale as in Seurat
 
 # CHECKPOINT: pca.mtx
 
-pca.mat <- reducedDim(sfe_tissue, "PCA") %>% 
-	Matrix::Matrix(sparse=TRUE) %>%
-	checkpoint.mtx("pca.mtx")
+pca.mat <- reducedDim(sfe_tissue, "PCA") %>% Matrix::Matrix(sparse=TRUE)
+. <- checkpoint.mtx("pca.mtx", pca.mat)
 
 set.seed(29)
 colData(sfe_tissue)$cluster <- clusterRows(
@@ -78,7 +77,7 @@ colData(sfe_tissue)$cluster <- clusterRows(
 )
 
 # CHECKPOINT: cluster.txt
-checkpoint.txt(sfe_tissue$cluster, "cluster.txt", sync=TRUE)
+checkpoint.txt("cluster.txt", sfe_tissue$cluster, sync=TRUE)
 
 markers <- findMarkers(sfe_tissue, groups = colData(sfe_tissue)$cluster,
                        test.type = "wilcox", pval.type = "all", direction = "up")
@@ -87,4 +86,4 @@ markers <- findMarkers(sfe_tissue, groups = colData(sfe_tissue)$cluster,
 
 genes_use <- vapply(markers, function(x) rownames(x)[1], FUN.VALUE = character(1))
 # CHECKPOINT (sync): genes_use.txt
-checkpoint.txt(genes_use, "marker_genes_set.txt", sync=TRUE)
+checkpoint.txt("marker_genes_set.txt", genes_use, sync=TRUE)

@@ -40,40 +40,39 @@ df <- colData(sce)[, c(
 	"subsets_mito_detected", 
 	"subsets_mito_percent"
 )] %>% as.data.frame
-checkpoint.csv(df, "qc_metrics.csv")
+checkpoint.csv("qc_metrics.csv", df)
 
 sce <- sce[, sce$subsets_mito_percent < 20]
 sce <- sce[rowSums(counts(sce)) > 0,]
 
 
 # CHECKPOINT: counts.mtx
-. <- checkpoint.mtx(counts(sce), "counts.mtx")
+. <- checkpoint.mtx( "counts.mtx", counts(sce))
 # CHECKPOINT: barcodes.txt
-checkpoint.txt(colnames(sce), "barcodes.txt")
+checkpoint.txt("barcodes.txt", colnames(sce))
 # CHECKPOINT: genes.txt
-checkpoint.txt(rownames(sce), "genes.txt")
+checkpoint.txt("genes.txt", rownames(sce))
 
 # Basic non-spatial analyses
 sce <- logNormCounts(sce)
 # CHECKPOINT: logcounts.mtx
-. <- checkpoint.mtx(logcounts(sce), "logcounts.mtx")
+. <- checkpoint.mtx("logcounts.mtx", logcounts(sce))
 
 dec <- modelGeneVar(sce, lowess = FALSE)
 hvgs <- getTopHVGs(dec, n = 2000)
 
 # CHECKPOINT (sync): gene_var.csv
-checkpoint.csv(dec, "gene_var.csv", sync=TRUE)
+checkpoint.csv("gene_var.csv", dec, sync=TRUE)
 # CHECKPOINT: hvgs.txt
-checkpoint.txt(hvgs, "hvgs.txt")
+checkpoint.txt("hvgs.txt", hvgs)
 
 set.seed(29)
 sce <- runPCA(sce, ncomponents = 30, BSPARAM = IrlbaParam(),
               subset_row = hvgs, scale = TRUE)
 
 # CHECKPOINT: pca.mtx
-reducedDim(sce, "PCA") %>% 
-    Matrix::Matrix(sparse=TRUE) %>%
-    checkpoint.mtx("pca.mtx")
+pca_mat <- reducedDim(sce, "PCA") %>% Matrix::Matrix(sparse=TRUE)
+. <- checkpoint.mtx("pca.mtx", pca_mat)
 
 sce$cluster <- clusterRows(
     reducedDim(sce, "PCA")[,1:10],
@@ -86,7 +85,7 @@ sce$cluster <- clusterRows(
 )))
 
 # CHECKPOINT: cluster.txt
-checkpoint.txt(sce$cluster, "cluster.txt", sync=TRUE)
+checkpoint.txt("cluster.txt", sce$cluster, sync=TRUE)
 
 markers <- findMarkers(sce, groups = colData(sce)$cluster,
                        test.type = "wilcox", pval.type = "all", direction = "up")
@@ -94,7 +93,7 @@ markers <- findMarkers(sce, groups = colData(sce)$cluster,
 # CHECKPOINT: markers.csv
 for (i in seq_along(markers)) {
     df <- markers[[i]][c("p.value", "FDR", "summary.AUC")]
-    checkpoint.csv(df, paste0("markers_", i, ".csv"), sync=TRUE)
+    checkpoint.csv(paste0("markers_", i, ".csv"), df, sync=TRUE)
 }
 
 top_markers <- unlist(lapply(markers, function(x) head(rownames(x), 1)))
@@ -122,7 +121,7 @@ class(listw) <- "listw"
 attr(listw, "region.id") <- colnames(sce)
 
 # CHECKPOINT: knn10.mtx
-checkpoint.knn(listw, "knn10.mtx", sync=TRUE)
+. <- checkpoint.knn("knn10.mtx", listw, sync=TRUE)
 
 sfe <- toSpatialFeatureExperiment(sce, spatialCoords = reducedDim(sce, "PCA")[,1:2], spatialCoordsNames = NULL)
 colGraph(sfe, "knn10") <- listw
@@ -133,7 +132,7 @@ sfe <- colDataMoransI(sfe, c("sum", "detected", "subsets_mito_percent"))
 
 # CHECKPOINT: morans.csv
 moran.cf <- colFeatureData(sfe)[c("sum", "detected", "subsets_mito_percent"), ]["moran_sample01"]
-checkpoint.csv(moran.cf %>% S4Vectors::rename(moran_sample01="moran"), "morans.csv")
+checkpoint.csv( "morans.csv", moran.cf %>% S4Vectors::rename(moran_sample01="moran"))
 
 ### Moran plot
 sfe <- colDataUnivariate(sfe, "moran.plot", c("sum", "detected", "subsets_mito_percent"))
@@ -141,7 +140,7 @@ sfe <- colDataUnivariate(sfe, "moran.plot", c("sum", "detected", "subsets_mito_p
 # CHECKPOINT: moran_plot.csv
 lr <- localResults(sfe, name="moran.plot", features=c("sum", "detected", "subsets_mito_percent"))
 mp.df <- data.frame(sum=lr[[1]]$wx, detected=lr[[2]]$wx, subsets_mito_percent=lr[[3]]$wx, row.names=rownames(lr[[1]]))
-checkpoint.csv(mp.df, "moran_plot.csv")
+checkpoint.csv("moran_plot.csv", mp.df)
 lr <- NULL
 
 ### Local Moran's I
@@ -150,12 +149,8 @@ sfe <- colDataUnivariate(sfe, "localmoran", c("sum", "detected", "subsets_mito_p
 # CHECKPOINT: localmoran.csv
 lr <- localResults(sfe, name="localmoran", features=c("sum", "detected", "subsets_mito_percent"))
 lm.df <- data.frame(sum=lr[[1]]$Ii, detected=lr[[2]]$Ii, subsets_mito_percent=lr[[3]]$Ii, row.names=rownames(lr[[1]]))
-checkpoint.csv(lm.df, "localmoran.csv")
+checkpoint.csv("localmoran.csv", lm.df)
 lr <- NULL
-
-# sfe$sum_localmoran <- localResult(sfe, "localmoran", "sum")[,"Ii"]
-# sfe$detected_localmoran <- localResult(sfe, "localmoran", "detected")[,"Ii"]
-# sfe$pct_mito_localmoran <- localResult(sfe, "localmoran", "subsets_mito_percent")[,"Ii"]
 
 ### Local spatial heteroscadasticity (LOSH)
 sfe <- colDataUnivariate(sfe, "LOSH", c("sum", "detected", "subsets_mito_percent"))
@@ -164,7 +159,7 @@ lr <- localResults(sfe, name="LOSH", features=c("sum", "detected", "subsets_mito
     lapply(function(X)as.data.frame(X))
 losh.df <- data.frame(sum=lr[[1]]$Hi, detected=lr[[2]]$Hi, subsets_mito_percent=lr[[3]]$Hi, row.names=rownames(lr[[1]]))
 rownames(losh.df) <- colnames(sfe)
-checkpoint.csv(losh.df, "losh.csv")
+checkpoint.csv("losh.csv", losh.df)
 lr <- NULL
 
 # "Spatial" analyses for gene expression
@@ -182,7 +177,7 @@ sfe <- runMoransI(sfe, features = hvgs, BPPARAM = MulticoreParam(2))
 # CHECKPOINT: morans_hvgs.csv
 keep.rows <- !is.na(rowData(sfe)$moran_sample01)
 morans <- rowData(sfe)[hvgs, ]["moran_sample01"]
-checkpoint.csv(morans %>% S4Vectors::rename(moran_sample01="moran"), "morans_hvgs.csv")
+checkpoint.csv("morans_hvgs.csv", morans %>% S4Vectors::rename(moran_sample01="moran"))
 
 top_moran <- head(rownames(sfe)[order(rowData(sfe)$moran_sample01, decreasing = TRUE)], 4)
 top_moran_symbol <- rowData(sfe)[top_moran, "Symbol"]
@@ -196,13 +191,14 @@ top_markers_df$cluster <- factor(top_markers_df$cluster,
 
 sfe <- runUnivariate(sfe, "moran.mc", features = top_markers, nsim = 200)
 # CHECKPOINT: moran_mc.csv
-# TODO: Do we have to?
+# TODO: Do we have to, we'd only compare the I's?
 
-# TODO: do we really need the correlogram?
+# TODO: do we need to the correlogram?
 # sfe <- runUnivariate(sfe, "sp.correlogram", top_markers, order = 6, 
 #                      zero.policy = TRUE, BPPARAM = MulticoreParam(2))
 
 # CHECKPOINT: correlogram.csv
+# Not for now.
 
 sfe <- runUnivariate(sfe, "localmoran", features = top_markers)
 # CHECKPOINT: localmoran.csv
@@ -212,7 +208,7 @@ LR <- localResults(sfe, name="localmoran", features=top_markers)
 column_names <- paste(top_markers, "Ii", sep=".")
 LR <- do.call(cbind, LR)[column_names]
 data.table::setnames(LR, old=column_names, new=top_markers)
-checkpoint.csv(LR, "localmoran.csv")
+checkpoint.csv("localmoran.csv", LR)
 
 
 new_colname <- paste0("cluster", seq_along(top_markers), "_", 
@@ -229,7 +225,7 @@ column_names <- paste(top_markers, "Hi", sep=".")
 LR <- do.call(cbind, LR)[column_names]
 data.table::setnames(LR, old=column_names, new=top_markers)
 rownames(LR) <- colnames(sfe)
-checkpoint.csv(LR, "losh.csv")
+checkpoint.csv("losh.csv", LR)
 
 new_colname2 <- paste0("cluster", seq_along(top_markers), "_", 
                       top_markers_symbol, "_losh")
@@ -246,4 +242,4 @@ lr <- localResults(sfe, name="moran.plot", features=top_markers)
 colnames <- paste(top_markers, "wx", sep=".")
 df <- do.call(cbind, lr)[colnames]
 data.table::setnames(df, old=colnames, new=top_markers)
-checkpoint.csv(df, "moran_plot.csv")
+checkpoint.csv("moran_plot.csv", df)
