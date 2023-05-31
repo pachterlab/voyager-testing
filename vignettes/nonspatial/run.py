@@ -46,7 +46,8 @@ _, genes_to_keep = np.where(adata[cells_to_keep, :].X.sum(axis=0) > 0)
 adata = adata[cells_to_keep, genes_to_keep].copy()
 
 # CHECKPOINT: counts.mtx
-checkpoint.add("counts.mtx", adata.X)
+checkpoint.add("counts.mtx", adata.X.astype("int64"))
+
 # CHECKPOINT: barcodes.txt
 checkpoint.add("barcodes.txt", adata.obs_names)
 # CHECKPOINT: genes.txt

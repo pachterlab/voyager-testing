@@ -76,7 +76,7 @@ checkpoint.add("tissue_ids.txt", adata_tissue.obs_names)
 adata_tissue.layers["counts"] = adata_tissue.X.copy()
 
 # CHECKPOINT: counts.mtx
-checkpoint.add("counts.mtx", adata_tissue.layers["counts"])
+checkpoint.add("counts.mtx", adata_tissue.layers["counts"].astype("int64"))
 
 # Log-normalize the adata.X matrix
 vp.utils.log_norm_counts(adata_tissue, inplace=True)
