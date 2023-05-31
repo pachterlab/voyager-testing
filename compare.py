@@ -191,11 +191,11 @@ def compare_csv(
     return all_close
 
 
-def get_common_files(dir_0, dir_1):
+def get_common_files(dir_0, dir_1, verbose: int = 0):
     res = filecmp.dircmp(dir_0, dir_1)
-    if res.left_only:
+    if res.left_only and verbose > 0:
         print(f"Files not found in {dir_1}:", *res.left_only, sep="\n\t")
-    if res.right_only:
+    if res.right_only and verbose > 0:
         print(f"Files not found in {dir_0}:", *res.right_only, sep="\n\t")
 
     def comp(fn):
@@ -224,7 +224,7 @@ def test_files(dir_0: Path, dir_1: Path, **kwargs) -> Tuple[bool, pd.DataFrame]:
     verbose = kwargs.get("verbose", 1)
 
     ret = True
-    common_files = get_common_files(dir_0, dir_1)
+    common_files = get_common_files(dir_0, dir_1, verbose=verbose)
     comp_df = pd.DataFrame(index=common_files)
     for filename in common_files:
         file_0 = dir_0 / filename
