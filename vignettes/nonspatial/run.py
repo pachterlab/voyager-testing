@@ -97,8 +97,8 @@ adata.X = vp.utils.scale(adata.X, center=True)
 sc.tl.pca(adata, use_highly_variable=True, n_comps=30, random_state=1337)
 adata.X = adata.layers["logcounts"].copy()
 # CHECKPOINT: pca.mtx
-checkpoint.add("pca.mtx", adata.obsm["X_pca"])
-
+checkpoint.add("pca_embedding.mtx", adata.obsm["X_pca"])
+checkpoint.add("pca_vec.mtx", adata[:, hvgs].varm["PCs"])
 
 # In[ ]:
 

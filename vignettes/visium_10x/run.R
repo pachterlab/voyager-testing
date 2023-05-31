@@ -62,7 +62,10 @@ sfe_tissue <- runPCA(sfe_tissue, ncomponents = 30, subset_row = hvgs,
 # CHECKPOINT: pca.mtx
 
 pca.mat <- reducedDim(sfe_tissue, "PCA") %>% Matrix::Matrix(sparse=TRUE)
-. <- checkpoint.mtx("pca.mtx", pca.mat)
+. <- checkpoint.mtx("pca_embedding.mtx", pca.mat)
+
+pca.rot <- attr(reducedDim(sfe_tissue, "PCA"), "rotation") %>% Matrix::Matrix(sparse=TRUE)
+. <- checkpoint.mtx("pca_vec.mtx", pca.rot)
 
 set.seed(29)
 colData(sfe_tissue)$cluster <- clusterRows(

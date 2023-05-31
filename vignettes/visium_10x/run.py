@@ -97,7 +97,6 @@ hvgs = vp.utils.get_top_hvgs(gene_var)
 
 # CHECKPOINT: hvgs.txt
 checkpoint.add("hvgs.txt", hvgs, type="txt")
-# sync?
 
 # Set the 'highly_variable' column for the genes
 adata_tissue.var["highly_variable"] = False
@@ -109,7 +108,8 @@ adata_tissue.X = vp.utils.scale(adata_tissue.X, center=True)
 sc.tl.pca(adata_tissue, use_highly_variable=True, n_comps=30, random_state=1337)
 
 # CHECKPOINT: pca.mtx
-checkpoint.add("pca.mtx", adata_tissue.obsm["X_pca"])
+checkpoint.add("pca_embedding.mtx", adata_tissue.obsm["X_pca"])
+checkpoint.add("pca_vec.mtx", adata_tissue[:, hvgs].varm["PCs"])
 
 from leidenalg import ModularityVertexPartition
 

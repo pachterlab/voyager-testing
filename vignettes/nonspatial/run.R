@@ -71,8 +71,11 @@ sce <- runPCA(sce, ncomponents = 30, BSPARAM = IrlbaParam(),
               subset_row = hvgs, scale = TRUE)
 
 # CHECKPOINT: pca.mtx
-pca_mat <- reducedDim(sce, "PCA") %>% Matrix::Matrix(sparse=TRUE)
-. <- checkpoint.mtx("pca.mtx", pca_mat)
+pca.mat <- reducedDim(sce, "PCA") %>% Matrix::Matrix(sparse=TRUE)
+. <- checkpoint.mtx("pca_embedding.mtx", pca.mat)
+
+pca.rot <- attr(reducedDim(sce, "PCA"), "rotation") %>% Matrix::Matrix(sparse=TRUE)
+. <- checkpoint.mtx("pca_vec.mtx", pca.rot)
 
 sce$cluster <- clusterRows(
     reducedDim(sce, "PCA")[,1:10],
