@@ -222,7 +222,7 @@ def get_compare_func(filename: str) -> Callable[[Path, Path, bool], bool]:
 
 def test_files(dir_0: Path, dir_1: Path, **kwargs) -> Tuple[bool, pd.DataFrame]:
     verbose = kwargs.get("verbose", 1)
-
+    files = kwargs.pop("files", None)
     ret = True
     common_files = get_common_files(dir_0, dir_1, verbose=verbose)
     comp_df = pd.DataFrame(index=common_files)
@@ -230,8 +230,14 @@ def test_files(dir_0: Path, dir_1: Path, **kwargs) -> Tuple[bool, pd.DataFrame]:
         file_0 = dir_0 / filename
         file_1 = dir_1 / filename
 
+        # If subset of files is specified (regex), skip if not in subset
+        if files and not any(Path(filename).match(f"*{f}*") for f in files):
+            comp_df.drop(filename, inplace=True)
+            continue
+
         if verbose:
             print("Comparing", filename, end=":\n")
+
         compare = get_compare_func(filename)
         res = compare(file_0, file_1, **kwargs)  # type: ignore
         ret = ret and res
@@ -270,6 +276,12 @@ def parse_args():
 
     parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="Verbose output."
+    )
+
+    parser.add_argument(
+        "--files",
+        nargs="+",
+        help="Files to compare. Default: all files in syncdirs/checkpoints.",
     )
 
     return parser.parse_args()
