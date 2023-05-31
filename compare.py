@@ -108,6 +108,7 @@ def compare_pca(
 
     self_max_parallel = 0
     self_max_orthogonal = 0
+    max_diff_len = 0.0
 
     for i in range(m1.shape[1]):
         n1 = np.linalg.norm(m1[:, i])
@@ -115,6 +116,7 @@ def compare_pca(
 
         d = np.dot(m1[:, i], m2[:, i]) / (n1 * n2)
         self_d = np.dot(m1[:, i], m1[:, i]) / (n1 * n1)
+        max_diff_len = max(max_diff_len, np.abs(n1 - n2))
 
         if not (1 - pca_eps <= abs(d) <= 1 + pca_eps):
             diff = abs(1 - abs(d))
@@ -144,6 +146,7 @@ def compare_pca(
 
         print(f"\tmax PCA diff (parallel): {max_diff_parallel}")
         print(f"\tmax PCA diff (orthogonal{ortho_str}): {max_diff_orthogonal}")
+        print(f"\tmax PCA diff (length): {max_diff_len}")
 
     return success
 
